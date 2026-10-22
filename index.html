@@ -1,0 +1,1233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111e33">
+<title>eillie · 智能乒乓球拍实时监控</title>
+<style>
+:root{
+  --navy-900:#0b1526;
+  --navy-800:#111e33;
+  --navy-750:#16233a;
+  --navy-700:#1b2a45;
+  --line:rgba(255,255,255,.09);
+  --line-2:rgba(255,255,255,.16);
+  --gold:#f5d21a;
+  --gold-lite:#ffe45c;
+  --gold-deep:#d3ac06;
+  --ink:#1a1c0e;
+  --ink-dim:rgba(26,28,14,.62);
+  --tx:#eef3fb;
+  --dim:#93a5c4;
+  --ax:#ffd54a;   /* X 轴 */
+  --ay:#6fe3b4;   /* Y 轴 */
+  --az:#63b3ff;   /* Z 轴 */
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  background:var(--navy-900);color:var(--tx);
+  font:14px/1.6 "Inter","Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  padding-bottom:calc(28px + env(safe-area-inset-bottom));
+  -webkit-tap-highlight-color:transparent;
+}
+
+/* ---------- 顶栏 ---------- */
+header{
+  position:sticky;top:0;z-index:20;
+  display:flex;align-items:center;gap:14px;
+  padding:calc(14px + env(safe-area-inset-top)) 20px 14px;
+  background:rgba(17,30,51,.94);
+  backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line);
+}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.logo{height:26px;width:auto;display:block;filter:drop-shadow(0 0 10px rgba(245,210,26,.28))}
+.logo-fallback{font:italic 700 26px Georgia,serif;color:var(--gold);letter-spacing:.5px}
+.hdr-t{font-size:15px;font-weight:600;letter-spacing:.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hdr-t small{display:block;font-size:11px;font-weight:400;color:var(--dim);letter-spacing:1.4px;text-transform:uppercase}
+#bConn{
+  margin-left:auto;flex:0 0 auto;
+  width:48px;height:48px;border-radius:15px;padding:0;
+  border:1px solid rgba(255,255,255,.22);
+  background:linear-gradient(140deg,var(--gold-lite),var(--gold) 45%,var(--gold-deep));
+  color:var(--ink);display:grid;place-items:center;cursor:pointer;
+  box-shadow:0 8px 22px -8px rgba(245,210,26,.75),inset 0 1px 0 rgba(255,255,255,.55);
+  transition:transform .15s,box-shadow .2s,opacity .2s;
+}
+#bConn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 12px 26px -8px rgba(245,210,26,.9),inset 0 1px 0 rgba(255,255,255,.6)}
+#bConn:active:not(:disabled){transform:scale(.96)}
+#bConn:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
+#bConn svg{width:24px;height:24px;display:block}
+
+/* ---------- 容器 ---------- */
+.wrap{max-width:1080px;margin:0 auto;padding:18px 16px 8px}
+
+/* ---------- 状态胶囊（参考图搜索框样式） ---------- */
+.statusbar{
+  display:flex;align-items:center;gap:10px;
+  padding:12px 16px;margin-bottom:14px;
+  border:1px solid var(--line-2);border-radius:14px;
+  background:rgba(255,255,255,.035);
+  font-size:13px;color:var(--dim);
+}
+.dot{width:8px;height:8px;border-radius:50%;background:#5d6d8a;flex:0 0 auto;transition:.2s}
+.dot.on{background:var(--gold);box-shadow:0 0 0 4px rgba(245,210,26,.16);animation:pulse 2s infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 7px rgba(245,210,26,0)}}
+.statusbar b{color:var(--tx);font-weight:600}
+.meter{margin-left:auto;font-variant-numeric:tabular-nums;letter-spacing:.5px;color:var(--gold);font-size:12px}
+
+/* ---------- 按钮 ---------- */
+.bar{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:18px}
+button{
+  font:inherit;font-size:13px;
+  background:rgba(255,255,255,.04);color:var(--tx);
+  border:1px solid var(--line-2);border-radius:11px;
+  padding:10px 15px;cursor:pointer;transition:.18s;
+  display:inline-flex;align-items:center;gap:7px;
+}
+button:hover:not(:disabled){background:rgba(245,210,26,.12);border-color:rgba(245,210,26,.5);color:var(--gold-lite)}
+button:active:not(:disabled){transform:scale(.97)}
+button:disabled{opacity:.3;cursor:not-allowed}
+button.primary{background:linear-gradient(140deg,var(--gold-lite),var(--gold) 50%,var(--gold-deep));color:var(--ink);border-color:rgba(255,255,255,.2);font-weight:700}
+button.primary:hover:not(:disabled){color:#000;filter:brightness(1.05)}
+button.rec{background:rgba(255,82,82,.16);border-color:rgba(255,82,82,.55);color:#ff8a8a}
+.ic{width:15px;height:15px;flex:0 0 auto}
+
+/* ---------- 主数据卡（金色，参考图名片） ---------- */
+.hero{
+  position:relative;overflow:hidden;
+  border-radius:18px;padding:20px 22px 18px;
+  background:linear-gradient(135deg,#ffe867 0%,#f7d622 30%,#ecc70f 62%,#d5ae05 100%);
+  border:1px solid rgba(255,255,255,.3);
+  color:var(--ink);
+  box-shadow:0 14px 34px -22px rgba(245,210,26,.45),inset 0 1px 0 rgba(255,255,255,.6);
+  margin-bottom:20px;
+}
+.hero::after{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:
+    radial-gradient(120% 80% at 6% 106%,rgba(255,255,255,.26),transparent 58%),
+    linear-gradient(116deg,transparent 50%,rgba(255,255,255,.1) 55%,transparent 62%);
+  mix-blend-mode:screen;
+}
+.hero-top{display:flex;align-items:flex-end;gap:22px;flex-wrap:wrap;position:relative;z-index:1}
+.hero-lab{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-dim);font-weight:600}
+.hero-num{font-size:clamp(42px,9vw,58px);line-height:1;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-1px}
+.hero-num span{font-size:14px;font-weight:600;margin-left:6px;letter-spacing:0;color:var(--ink-dim)}
+.hero-side{display:flex;gap:26px;margin-left:auto;flex-wrap:wrap}
+.hero-side .k{font-size:11px;letter-spacing:1.2px;color:var(--ink-dim);font-weight:600}
+.hero-side .v{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.25}
+.hero-side .v em{font-style:normal;font-size:11px;font-weight:600;color:var(--ink-dim);margin-left:3px}
+.hero-div{height:1px;background:rgba(26,28,14,.22);margin:16px 0 12px;position:relative;z-index:1}
+.hero-evt{font-size:13px;color:rgba(26,28,14,.78);position:relative;z-index:1;min-height:22px}
+.hero-evt b{color:#101206;font-weight:700}
+
+/* ---------- 小标题 ---------- */
+.sec{display:flex;align-items:baseline;gap:10px;margin:22px 2px 12px;font-size:14px;font-weight:700;letter-spacing:.5px}
+.sec span{font-size:10px;font-weight:600;letter-spacing:2px;color:var(--dim);text-transform:uppercase}
+
+/* ---------- 击球类型卡 ---------- */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:13px}
+@media(min-width:1000px){
+  .cards{grid-template-columns:repeat(5,1fr)}
+  .scard .h{flex-direction:column;align-items:flex-start;gap:1px}
+  .scard .en{font-size:11px}
+  .scard .v{font-size:30px}
+}
+.scard{
+  position:relative;overflow:hidden;border-radius:16px;padding:15px 17px 16px;
+  background:linear-gradient(135deg,#ffe867 0%,#f6d41e 34%,#ebc60f 68%,#d3ac06 100%);
+  border:1px solid rgba(255,255,255,.28);
+  color:var(--ink);
+  box-shadow:0 10px 24px -20px rgba(245,210,26,.5),inset 0 1px 0 rgba(255,255,255,.55);
+}
+.scard::after{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(112deg,transparent 47%,rgba(255,255,255,.12) 53%,transparent 60%);
+}
+.scard .h{position:relative;z-index:1;display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.scard .cn{font-size:16px;font-weight:700;letter-spacing:.5px}
+.scard .en{font:italic 500 12px "Inter",Georgia,serif;letter-spacing:.4px;color:var(--ink-dim);white-space:nowrap}
+.scard .row{position:relative;z-index:1;display:flex;align-items:flex-end;justify-content:space-between;margin-top:6px}
+.scard .v{font-size:34px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-1px}
+.scard .u{font-size:11px;font-weight:600;color:var(--ink-dim);margin-left:4px}
+.scard .pct{font-size:12px;font-weight:700;color:var(--ink-dim);font-variant-numeric:tabular-nums}
+.trk{position:relative;z-index:1;height:4px;border-radius:3px;background:rgba(26,28,14,.14);overflow:hidden;margin-top:12px}
+.trk i{display:block;height:100%;width:0;border-radius:3px;background:#1a1c0e;transition:width .3s}
+
+/* ---------- 深色卡：波形 / 表格 ---------- */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-top:13px}
+@media(max-width:820px){.grid{grid-template-columns:1fr}}
+.card{
+  background:linear-gradient(180deg,var(--navy-750),var(--navy-800));
+  border:1px solid var(--line);border-radius:16px;padding:14px 15px;
+}
+.card h3{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-size:13px;font-weight:600;color:var(--tx);margin-bottom:10px}
+@media(max-width:560px){
+  .seg{margin-left:0;width:100%;justify-content:space-between}
+  .seg button{flex:1;text-align:center;padding:7px 4px}
+}
+.card h3 .lg{display:flex;gap:9px;margin-left:auto;font-size:11px;font-weight:600;letter-spacing:.5px;color:var(--dim)}
+.card h3 .lg i{font-style:normal;display:inline-flex;align-items:center;gap:4px}
+.card h3 .lg i::before{content:"";width:7px;height:7px;border-radius:2px;background:currentColor}
+.tag{font-size:10.5px;font-weight:600;letter-spacing:1px;color:var(--gold);border:1px solid rgba(245,210,26,.35);border-radius:6px;padding:1px 7px;margin-left:auto}
+canvas{width:100%;height:154px;display:block;border-radius:9px;background:rgba(0,0,0,.22)}
+.tbl{max-height:300px;overflow:auto;border-radius:9px;margin-top:2px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{padding:8px 9px;text-align:left;white-space:nowrap;font-variant-numeric:tabular-nums;border-bottom:1px solid var(--line)}
+th{position:sticky;top:0;z-index:1;background:var(--navy-800);color:var(--dim);font-size:11px;font-weight:600;letter-spacing:.6px}
+tbody tr:hover{background:rgba(245,210,26,.05)}
+tbody tr:first-child td{color:var(--gold-lite)}
+.hint{margin:20px 2px 0;font-size:12px;line-height:1.9;color:var(--dim);list-style:none}
+.hint li{position:relative;padding-left:14px}
+.hint li::before{content:"";position:absolute;left:0;top:9px;width:5px;height:5px;border-radius:1px;background:var(--gold);opacity:.65}
+.hint b{color:var(--tx);font-weight:600}
+
+/* ---------- 击球快照 / 标准动作对比 ---------- */
+.seg{display:inline-flex;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:10px;padding:2px;gap:2px;margin-left:auto;flex:0 0 auto}
+.seg button{background:none;border:0;padding:6px 12px;border-radius:8px;font-size:12px;color:var(--dim);display:block}
+.seg button.on{background:rgba(245,210,26,.16);color:var(--gold-lite);font-weight:600}
+.seg button:hover:not(.on){color:var(--tx)}
+#cCmp{height:210px}
+.cmprow{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px}
+.scorebox{
+  flex:1 1 210px;min-width:190px;
+  border:1px solid var(--line);border-radius:13px;padding:12px 14px;
+  background:rgba(0,0,0,.2);
+}
+.scorenum{font-size:38px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-1px}
+.scorelab{font-size:11px;letter-spacing:1.2px;color:var(--dim);font-weight:600;margin-bottom:8px}
+.axbar{display:flex;align-items:center;gap:8px;font-size:11.5px;margin:5px 0}
+.axbar .nm{width:24px;font-weight:700}
+.axbar .tk{flex:1;height:6px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden}
+.axbar .tk i{display:block;height:100%;width:0;border-radius:4px;background:currentColor;transition:width .3s}
+.axbar .vv{width:42px;text-align:right;font-variant-numeric:tabular-nums;color:var(--dim)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--dim);margin:10px 2px 0}
+.legend i{font-style:normal;display:inline-flex;align-items:center;gap:5px}
+.legend .ln{width:18px;border-top:2px solid currentColor;display:inline-block}
+.legend .ln.dash{border-top-style:dashed}
+.stdbtnrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0 10px;font-size:12px;color:var(--dim)}
+.stdbtnrow button{padding:8px 12px;font-size:12px}
+.mini-select{
+  appearance:none;-webkit-appearance:none;
+  background:rgba(255,255,255,.06);color:var(--tx);
+  border:1px solid var(--line-2);border-radius:9px;
+  padding:7px 26px 7px 10px;font:600 12px/1 inherit;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2393a5c4' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 8px center;cursor:pointer;
+}
+.mini-select option{background:var(--navy-800);color:var(--tx)}
+.stdbtnrow b{color:var(--gold-lite)}
+.snaps{display:grid;grid-template-columns:repeat(auto-fill,minmax(146px,1fr));gap:10px;margin-top:10px}
+.snap{
+  border:1px solid var(--line);border-radius:12px;padding:8px;cursor:pointer;
+  background:rgba(255,255,255,.03);transition:.18s;
+}
+.snap:hover{border-color:rgba(245,210,26,.5)}
+.snap.on{border-color:var(--gold);background:rgba(245,210,26,.1)}
+.snap canvas{height:46px;background:rgba(0,0,0,.28);border-radius:6px}
+.snap .m{display:flex;justify-content:space-between;gap:6px;font-size:11px;margin-top:7px}
+.snap .m b{color:var(--gold-lite);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.snap .m span{color:var(--dim);flex:0 0 auto}
+.emptymsg{
+  display:grid;place-items:center;text-align:center;color:var(--dim);font-size:12.5px;
+  border:1px dashed var(--line-2);border-radius:12px;padding:26px 16px;background:rgba(0,0,0,.18);
+}
+
+/* ---------- 提示条 ---------- */
+#toast{
+  position:fixed;left:50%;bottom:22px;transform:translate(-50%,20px);
+  max-width:min(92vw,520px);padding:11px 16px;border-radius:12px;
+  background:rgba(20,32,53,.97);border:1px solid rgba(245,210,26,.45);
+  color:var(--tx);font-size:13px;box-shadow:0 14px 34px -12px #000;
+  opacity:0;pointer-events:none;transition:.25s;z-index:50;
+}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* ---------- 语言切换 ---------- */
+.lang-select{
+  margin-left:auto;margin-right:10px;flex:0 0 auto;
+  appearance:none;-webkit-appearance:none;
+  background:rgba(255,255,255,.06);color:var(--tx);
+  border:1px solid var(--line-2);border-radius:10px;
+  padding:8px 28px 8px 12px;font:600 12px/1 inherit;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2393a5c4' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center;
+  cursor:pointer;transition:.18s;
+}
+.lang-select:hover{border-color:rgba(245,210,26,.5);color:var(--gold-lite)}
+/* ---------- 确认弹窗 ---------- */
+#mask{
+  position:fixed;inset:0;background:rgba(4,9,18,.72);backdrop-filter:blur(3px);
+  display:none;align-items:center;justify-content:center;z-index:60;padding:20px;
+}
+#mask.on{display:flex}
+.modal{
+  width:min(92vw,360px);background:var(--navy-800);
+  border:1px solid var(--line-2);border-radius:16px;padding:18px 18px 14px;
+  box-shadow:0 18px 50px rgba(0,0,0,.55);
+}
+.modal h4{
+  font-size:15px;font-weight:700;margin-bottom:8px;color:var(--tx);
+  display:flex;align-items:center;gap:8px;
+}
+.modal h4::before{
+  content:'';width:8px;height:8px;border-radius:50%;flex:0 0 auto;
+  background:var(--gold);box-shadow:0 0 0 3px rgba(245,210,26,.18);
+}
+.modal p{font-size:12.5px;line-height:1.65;color:var(--dim);margin:0 0 4px}
+.modal .warn{
+  margin-top:10px;padding:9px 11px;border-radius:9px;font-size:11.5px;line-height:1.6;
+  background:rgba(245,210,26,.08);border:1px solid rgba(245,210,26,.22);color:var(--gold-lite);
+}
+.modal .btns{display:flex;gap:10px;margin-top:16px}
+.modal .btns button{
+  flex:1;justify-content:center;      /* 全局 button 是 inline-flex，必须显式居中 */
+  padding:9px 0;border-radius:10px;font-size:13px;font-weight:600;
+  border:1px solid var(--line-2);background:rgba(255,255,255,.05);
+  color:var(--tx);cursor:pointer;font-family:inherit;
+}
+.modal .btns button.cancel{background:transparent;color:var(--dim)}
+.modal .btns button.cancel:hover{
+  background:rgba(255,255,255,.06);color:var(--tx);border-color:var(--line-2);
+}
+.modal .btns button.ok{
+  background:linear-gradient(180deg,var(--gold-lite),var(--gold));
+  color:var(--ink);border-color:var(--gold-deep);font-weight:700;
+}
+.modal .btns button.ok:hover{color:#000;filter:brightness(1.06);border-color:var(--gold-deep)}
+.modal .btns button:active:not(:disabled){transform:scale(.97)}
+.lang-select option{background:var(--navy-800);color:var(--tx)}
+@media(max-width:420px){.lang-select{padding:8px 24px 8px 8px;font-size:11px}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <img class="logo" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABDgAAAHLCAYAAAAtLiifAABchklEQVR4AezBCaCt52Av7metvfeZk5zM+ZKQARGSvMaQL0qk1JCqoCjScLUIpUpQNaSGUjOlVTVWTVWlauy9vWqqevUa6n6IWUQkb0giMifn5Jz9T+vfS0tIcvaw1t6/5xEREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREavSSERErEqtFldZi03YiPVYg7UY+a/mcTm24FJcgou7fthqlWi1bMbBmLG6XYhvdv1wpWXUahnhcKwTX+r64VKrRKtljJ2wARsxhw0Y+2lbcTkux6W4GJd1/TAvIiJWnFkREbGqtFr2wNE4FDdFh72wO3bGLn7aPM7HRTgPZ+OsVsu38Vl8Hmd3/WAFOwZvws5Wt4/gfjjP8lqDd+IQcSt8zgrWalmDW+AWuDEOxh7YGxuxJ2b8tMvwA/wQ5+JMnNVqGfBv+ErXD1eKiIgVYVZERKxorZYOh6DHr+FwrMEcZlwzI+yG3XCAH9uGrdiCL7ZaPoz/jW90/XCWiIjroNWyHjfBzXA33AE7Yw6zGLlm1mM/7OfH5rEVW3BOq+Uj+Ed8Hqd1/bBFRERMpVkREbGitFpcZQb74ddxX9wEu1p4M5jBOhyNo/EYnNpq+Rj+Ct/ElV0/iIi4Oq2WETbgONwHR2M/zFhYI6zBGmzCQXgwvoZ/a7X8NT6CyzDf9YOIiJgOsyIiYsVotWzEMXgA7oONlt5mHI2jcTI+jje0Wv531w/niYj4Ca2WEY7Ar+LhOBAjS2sWN8VNcQK+jrfhb1otX+36YbuIiJh4syIiYuq1WjbgNjgZR2N3k2EtfgVH4fOtlpfhYzi/64d5EbFqtVrGOBgPxgk4ADMmw41wCn4D72m1/Dla1w9bRUTExJoVERFTq9UyxqF4Go7HRpNpJ9weR+Of8fJWywe6ftgqIladVsvueCCe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OBCrzEIjIiJmaqWIiIiIiJgPUxiZhUZERERERERExIRrRERERERERERMuEZERERERERExIRrRETETK0VERERERHzYQ1GZqEREREzdbCIiIiIiJgPB2ClWWhERMRMrRAREREREfNhBUZmoTH/fiIiIiIiIubDxSIi4j815t8lIiIiIiJiPvxURET8p0ZERERERERExIRrzL+NIiIiIiJiPmwUERH/qTH/LhARsTSsFBERMV4uEBGxNExhZBYa82+DiIil4VARERFjpO2GDSIiloYWq8xCY/5dhV+LiJh8K0VERIyfX4iImHxTGJmFxvy7ApeJiIiIiIj58FMREaEx/zbgchERERERMR8uFRERGvPvN/iFiIiIiIiYDz8SEREa8+83uERERERERMyHn4iICFPm35W4TFzt1/gULhYRk+arIiIixs9F4mrT+BR+KCImzUW4wixMmX+/xs/E1S7BS/CvImLSbBIRETF+vieuthlvxLtFxKSZxhVmYco8a7thc+3LzzGNkdgL+7bdcLmIiIiIiNm7FFditWhwVNsNl4uIZaexMH6ATeI/rMMRtS8jERERERGzdzEuE/9hhOvXvqwWEctOY2H8CJvFfxjhRhiJiIiIiJi9X+BX4moHY28Rsew0Fsa3sUlc7Vg0IiIiIiJm7yJcIq52KPYTEcvOlIXxQ2wWV7sBVmOjiAlV+7IvrsSv226YFhEREYvlYvxSXO0g7C9igtW+7IEVuKzths1iRhoLoO2GS/EzcbXVuJWICVX7sh/OwNtx59qXFSIiImJRtN3wG/xYXG0KtxQxoWpf1uBFeD8eXvuyWszIlIXzLRwqrnZrnCNiwtS+2OIBuC3W4ER8rPblVRjabviViIiIWGjfEls7QcTkuikegvU4Fg+sfTkdn8AlbTdMi21qLJyviq3drPZlpYjJswpPxBr/2774fbwPp9e+3Lz2pREREREL6atia6X2ZZ2ICVP7MoXHYr3/bR3ujHfiLbhX7cuU2KYpC+ffxNaOwsH4rogJUfuyAg/HMf5f++JBuCfeVfvyOny57YYNIiIiYr79m9jaetwMnxUxIWpfbHES7ub/tRr3wp3xydqXl+FzbTf8WvwfjYVzAS4XVzsMB4uYLNfDH2Jk20bYE4/Ce/DS2pcjal9WiIiIiPlUcbG42m64We2LiAmyCn+MA2zfWtwNZ+IttS/H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" alt="eillie" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'logo-fallback',textContent:'eillie'}))">
+    <div class="hdr-t" data-i18n="header_title">智能乒乓球拍<small data-i18n="header_sub">Live Monitor</small></div>
+  </div>
+  <select id="langSel" class="lang-select" title="Language / 语言">
+    <option value="en">English</option>
+    <option value="zh-CN">简体中文</option>
+    <option value="zh-TW">繁體中文</option>
+  </select>
+  <button id="bConn" title="连接球拍" aria-label="连接球拍">
+    <svg id="icConn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M7 7l10 10-5 4V3l5 4L7 17"/>
+    </svg>
+  </button>
+</header>
+
+<div class="wrap">
+  <div class="statusbar">
+    <span class="dot" id="dot"></span>
+    <span id="st" data-i18n="st_disconnected">未连接 · 点右上角按钮连接球拍</span>
+    <span class="meter" id="meter">0 pkt/s</span>
+  </div>
+
+  <div class="bar">
+    <button id="bDisc" disabled>
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg><span data-i18n="disc">断开</span>
+    </button>
+    <button id="bRaw" disabled>
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/></svg><span data-i18n="rec" id="recLabel">录制原始数据</span>
+    </button>
+    <button id="bExpA" disabled>
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16"/></svg><span data-i18n="exp_a">导出动作记录</span>
+    </button>
+    <button id="bExpR" disabled>
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span data-i18n="exp_r">导出原始数据</span>
+    </button>
+    <button id="bClr" disabled data-i18n="clr">清空会话</button>
+  </div>
+
+  <section class="hero">
+    <div class="hero-top">
+      <div>
+        <div class="hero-lab" data-i18n="total_strokes">本局总击球</div>
+        <div class="hero-num" id="tot">0<span data-i18n="unit_times">次</span></div>
+      </div>
+      <div class="hero-side">
+        <div>
+          <div class="k" data-i18n="recent_speed">最近球速</div>
+          <div class="v"><span id="lv">0.0</span><em data-i18n="unit_kmh">km/h</em></div>
+        </div>
+        <div>
+          <div class="k" data-i18n="realtime_gyro">实时角速度</div>
+          <div class="v"><span id="lgv">0</span><em data-i18n="unit_deg_s">°/s</em></div>
+        </div>
+      </div>
+    </div>
+    <div class="hero-div"></div>
+    <div class="hero-evt" id="lastEvt" data-i18n="waiting">等待击球事件…</div>
+  </section>
+
+  <div class="sec"><span data-i18n="stroke_counts">击球类型统计</span> <span data-i18n="sub_stroke">Stroke Counts</span></div>
+  <div class="cards" id="stats"></div>
+
+  <div class="grid">
+    <div class="card">
+      <h3><span data-i18n="accel">三轴加速度</span> <span style="color:var(--dim);font-weight:400;font-size:11px">g</span>
+        <span class="lg"><i style="color:var(--ax)">X</i><i style="color:var(--ay)">Y</i><i style="color:var(--az)">Z</i></span>
+      </h3>
+      <canvas id="cA"></canvas>
+    </div>
+    <div class="card">
+      <h3><span data-i18n="gyro">三轴角速度</span> <span style="color:var(--dim);font-weight:400;font-size:11px" data-i18n="unit_deg_s">°/s</span>
+        <span class="lg"><i style="color:var(--ax)">X</i><i style="color:var(--ay)">Y</i><i style="color:var(--az)">Z</i></span>
+      </h3>
+      <canvas id="cG"></canvas>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:13px">
+    <h3>
+      <span data-i18n="cmp_title">击球快照与标准动作对比</span>
+      <span class="seg" id="segMode">
+        <button data-m="gyro" class="on" data-i18n="mode_gyro">角速度</button>
+        <button data-m="acc" data-i18n="mode_acc">加速度</button>
+        <button data-m="all" data-i18n="mode_all">全部6轴</button>
+      </span>
+    </h3>
+
+    <div class="cmprow">
+      <div style="flex:1 1 420px;min-width:0">
+        <canvas id="cCmp"></canvas>
+        <div class="legend">
+          <i><span class="ln"></span><span data-i18n="legend_cur">本次击球（实线）</span></i>
+          <i><span class="ln dash"></span><span data-i18n="legend_std">标准动作（虚线）</span></i>
+          <i style="color:var(--gold)"><span class="ln dash"></span><span data-i18n="hit_point">击球时刻 0 ms</span></i>
+        </div>
+      </div>
+      <div class="scorebox">
+        <div class="scorelab" data-i18n="score_lab">综合相似度</div>
+        <div class="scorenum" id="scoreNum">--</div>
+        <div id="axBars"></div>
+      </div>
+    </div>
+
+    <div class="stdbtnrow">
+      <span data-i18n="std_lab">标准模板</span>
+      <select id="stdType" class="mini-select"></select>
+      <span><span data-i18n="std_src_lab">来源</span>： <b id="stdSrc">-</b></span>
+      <button id="bUp" data-i18n="btn_up">上传标准 CSV</button>
+      <button id="bSetStd" data-i18n="btn_setstd">用本次设为标准</button>
+      <button id="bExpStd" data-i18n="btn_expstd">导出标准</button>
+      <button id="bResetStd" data-i18n="btn_reset">恢复内置</button>
+      <input type="file" id="fStd" accept=".csv,text/csv" hidden>
+    </div>
+
+    <div class="tbl" style="max-height:220px">
+      <table>
+        <thead><tr>
+          <th data-i18n="th_metric">指标</th><th data-i18n="th_cur">本次</th>
+          <th data-i18n="th_std">标准</th><th data-i18n="th_diff">差异</th>
+        </tr></thead>
+        <tbody id="cmpBody"></tbody>
+      </table>
+    </div>
+
+    <div class="sec" style="margin:16px 2px 4px"><span data-i18n="snap_list">最近击球快照</span></div>
+    <div class="snaps" id="snaps"></div>
+  </div>
+
+  <div class="card" style="margin-top:13px">
+    <h3><span data-i18n="action_log">动作记录</span> <span class="tag" id="cnt">0 <span data-i18n="unit_entry">条</span></span></h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th data-i18n="th_time">时间</th><th data-i18n="th_type">类型</th><th data-i18n="th_conf">置信度</th><th data-i18n="th_peak">峰值角速度</th><th data-i18n="th_speed">球速</th><th data-i18n="th_total">累计</th></tr></thead>
+        <tbody id="tb"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <ul class="hint">
+    <li data-i18n="hint_browser"><b>浏览器</b>：Chrome / Edge（桌面或安卓）；iOS 不支持 Web Bluetooth</li>
+    <li data-i18n="hint_connect"><b>连接</b>：点右上角金色按钮 → 选择 <b>eillie-TT-Bat</b></li>
+    <li data-i18n="hint_wave"><b>波形</b>：滚动显示最近 6 秒；<b>数据</b>来自设备端，与 OLED 屏一致</li>
+    <li data-i18n="hint_time"><b>时间</b>：动作记录精确到毫秒；原始数据 t_ms 为打开网页后经过的毫秒数</li>
+    <li data-i18n="hint_export"><b>导出</b>：动作记录 / 原始数据均可导出 CSV，可直接用 Excel 打开</li>
+    <li data-i18n="hint_snap"><b>快照对比</b>：每次击球自动截取击球前 300 ms 至后 700 ms 的六轴数据，与标准动作曲线叠加对比并给出相似度评分</li>
+  </ul>
+</div>
+
+<div id="mask">
+  <div class="modal">
+    <h4 id="mkTitle">确认清空</h4>
+    <p id="mkBody"></p>
+    <div class="warn" id="mkWarn"></div>
+    <div class="btns">
+      <button class="cancel" id="mkNo">取消</button>
+      <button class="ok" id="mkYes">确认清空</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const SVC='a5e8c001-2b4d-4f6e-9c3a-7d1e5f8b0a11',
+      CU ='a5e8c002-2b4d-4f6e-9c3a-7d1e5f8b0a11',
+      CE ='a5e8c003-2b4d-4f6e-9c3a-7d1e5f8b0a11',
+      CC ='a5e8c004-2b4d-4f6e-9c3a-7d1e5f8b0a11',   /* 指令特征(可写)：网页 → 设备 */
+      NAMES=['BHdrive','BHsmash','FHdrive','FHloop','FHsmash'],
+      CN=['反手快攻','反手扣杀','正手快攻','正手拉弧圈','正手扣杀'],
+      TW=['反手快攻','反手扣殺','正手快攻','正手拉弧圈','正手扣殺'],
+      EN=['Backhand Drive','Backhand Smash','Forehand Drive','Forehand Loop','Forehand Smash'],
+      AXC=['#ffd54a','#6fe3b4','#63b3ff'],   /* 加速度三轴 */
+      GYC=['#ff8a65','#8bd3ff','#c792ea'],   /* 角速度三轴（对比图 6 轴模式） */
+      MAXP=2000,                             /* 环形缓冲最大点数 */
+      KEEP_MS=6000,                          /* 缓冲保留时长 */
+      SNAP_PRE=300, SNAP_POST=700, SNAP_N=100; /* 快照窗口：击球前 300ms ~ 后 700ms，重采样 100 点 */
+const SNAP_DT=(SNAP_PRE+SNAP_POST)/(SNAP_N-1);
+
+/* ---------- 多语言 ---------- */
+const LANGS={
+  en:{
+    title:'eillie · Smart Table Tennis Racket Monitor',
+    header_title:'Smart Table Tennis Racket',header_sub:'Live Monitor',
+    conn_title:'Connect Racket',
+    st_disconnected:'Not connected · tap the top-right button to connect',
+    st_connecting:'Connecting…',
+    st_connected:'Connected',
+    st_failed:'Connection failed · make sure the racket is on and nearby',
+    st_disc:'Disconnected · tap top-right button to reconnect',
+    disc:'Disconnect',rec:'Record Raw Data',stop_rec:'Stop Recording',
+    exp_a:'Export Actions',exp_r:'Export Raw Data',clr:'Clear Session',
+    total_strokes:'Total Strokes',unit_times:'times',unit_kmh:'km/h',unit_deg_s:'°/s',
+    recent_speed:'Recent Speed',realtime_gyro:'Realtime Gyro',
+    waiting:'Waiting for stroke events…',
+    stroke_counts:'Stroke Counts',sub_stroke:'Stroke Counts',
+    accel:'3-axis Acceleration',gyro:'3-axis Gyroscope',
+    action_log:'Action Log',unit_entry:'entries',
+    th_time:'Time',th_type:'Type',th_conf:'Confidence',
+    th_peak:'Peak Gyro',th_speed:'Speed',th_total:'Total',
+    last_stroke:'Latest stroke',conf:'confidence',speed:'speed',peak:'peak',
+    no_ble:'Your browser does not support Web Bluetooth. Use Chrome / Edge (desktop or Android).',
+    ble_connected:'Connected: ',ble_failed:'Connection failed: ',
+    rec_started:'Started recording raw data',rec_stopped:'Stopped recording, ',
+    cleared:'Session cleared',
+    clr_title:'Clear session?',
+    clr_body:'This clears all counts, the action log and raw data shown on this page.',
+    clr_warn:'The racket will be reset too — its stored counts return to 0. This cannot be undone.',
+    clr_yes:'Clear',clr_no:'Cancel',
+    clr_sent:'Session cleared · racket counters reset',
+    clr_devfail:'Page cleared, but the racket did not acknowledge (outdated firmware?)',
+    hint_browser:'<b>Browser</b>: Chrome / Edge (desktop or Android); iOS does not support Web Bluetooth',
+    hint_connect:'<b>Connect</b>: tap the top-right golden button → select <b>eillie-TT-Bat</b>',
+    hint_wave:'<b>Waveform</b>: scrolls the latest 6 s; <b>data</b> comes from the device, identical to the OLED screen',
+    hint_time:'<b>Time</b>: action logs are precise to ms; raw t_ms is ms elapsed since opening the page',
+    hint_export:'<b>Export</b>: action logs / raw data can both be exported as CSV, openable directly in Excel',
+    hint_snap:'<b>Snapshot</b>: each stroke auto-captures 6-axis data from 300 ms before to 700 ms after impact, overlaid with the standard motion curve plus a similarity score',
+    cmp_title:'Stroke Snapshot vs Standard Motion',
+    mode_gyro:'Gyro',mode_acc:'Accel',mode_all:'All 6 axes',
+    legend_cur:'This stroke (solid)',legend_std:'Standard (dashed)',hit_point:'Impact at 0 ms',
+    score_lab:'Overall Similarity',
+    std_lab:'Standard',std_src_lab:'Source',
+    std_builtin:'Built-in demo',std_custom:'Saved from shot',std_csv:'CSV import',
+    btn_up:'Import CSV',btn_setstd:'Use shot as standard',btn_expstd:'Export standard',btn_reset:'Reset to built-in',
+    snap_list:'Recent Snapshots',
+    no_snap:'No snapshot yet — connect the racket and take a stroke; the snapshot is generated automatically',
+    th_metric:'Metric',th_cur:'This',th_std:'Standard',th_diff:'Diff',
+    m_peak:'Peak',m_peak_t:'Peak time',m_dur:'Active duration',m_rms:'RMS',
+    shot:'Shot',std_saved:'Saved as standard for: ',std_reset:'Standard reset to built-in',
+    std_loaded:'Standard imported',std_bad:'CSV parse failed — need 7 columns: t,ax,ay,az,gx,gy,gz',
+    need_snap:'No snapshot available yet',
+  },
+  'zh-CN':{
+    title:'eillie · 智能乒乓球拍实时监控',
+    header_title:'智能乒乓球拍',header_sub:'Live Monitor',
+    conn_title:'连接球拍',
+    st_disconnected:'未连接 · 点右上角按钮连接球拍',
+    st_connecting:'正在连接…',
+    st_connected:'已连接',
+    st_failed:'连接失败 · 请确认球拍已开机并在附近',
+    st_disc:'连接已断开 · 点右上角按钮重新连接',
+    disc:'断开',rec:'录制原始数据',stop_rec:'停止录制',
+    exp_a:'导出动作记录',exp_r:'导出原始数据',clr:'清空会话',
+    total_strokes:'本局总击球',unit_times:'次',unit_kmh:'km/h',unit_deg_s:'°/s',
+    recent_speed:'最近球速',realtime_gyro:'实时角速度',
+    waiting:'等待击球事件…',
+    stroke_counts:'击球类型统计',sub_stroke:'Stroke Counts',
+    accel:'三轴加速度',gyro:'三轴角速度',
+    action_log:'动作记录',unit_entry:'条',
+    th_time:'时间',th_type:'类型',th_conf:'置信度',
+    th_peak:'峰值角速度',th_speed:'球速',th_total:'累计',
+    last_stroke:'最新击球',conf:'置信度',speed:'球速',peak:'峰值',
+    no_ble:'当前浏览器不支持 Web Bluetooth，请使用 Chrome / Edge（桌面或安卓）',
+    ble_connected:'已连接：',ble_failed:'连接失败：',
+    rec_started:'开始录制原始数据',rec_stopped:'已停止录制，共 ',
+    cleared:'会话已清空',
+    clr_title:'确认清空会话？',
+    clr_body:'将清空本页显示的全部计数、动作记录与原始数据。',
+    clr_warn:'同时会下发指令清空球拍端的计数，设备计数归零。此操作不可撤销。',
+    clr_yes:'确认清空',clr_no:'取消',
+    clr_sent:'会话已清空 · 球拍计数已同步归零',
+    clr_devfail:'网页已清空，但球拍未响应（固件可能未升级，不支持该指令）',
+    hint_browser:'<b>浏览器</b>：Chrome / Edge（桌面或安卓）；iOS 不支持 Web Bluetooth',
+    hint_connect:'<b>连接</b>：点右上角金色按钮 → 选择 <b>eillie-TT-Bat</b>',
+    hint_wave:'<b>波形</b>：滚动显示最近 6 秒；<b>数据</b>来自设备端，与 OLED 屏一致',
+    hint_time:'<b>时间</b>：动作记录精确到毫秒；原始数据 t_ms 为打开网页后经过的毫秒数',
+    hint_export:'<b>导出</b>：动作记录 / 原始数据均可导出 CSV，可直接用 Excel 打开',
+    hint_snap:'<b>快照对比</b>：每次击球自动截取击球前 300 ms 至后 700 ms 的六轴数据，与标准动作曲线叠加对比并给出相似度评分',
+    cmp_title:'击球快照与标准动作对比',
+    mode_gyro:'角速度',mode_acc:'加速度',mode_all:'全部6轴',
+    legend_cur:'本次击球（实线）',legend_std:'标准动作（虚线）',hit_point:'击球时刻 0 ms',
+    score_lab:'综合相似度',
+    std_lab:'标准模板',std_src_lab:'来源',
+    std_builtin:'内置示例',std_custom:'实测保存',std_csv:'CSV 导入',
+    btn_up:'上传标准 CSV',btn_setstd:'用本次设为标准',btn_expstd:'导出标准',btn_reset:'恢复内置',
+    snap_list:'最近击球快照',
+    no_snap:'暂无快照：连接球拍并完成一次击球后自动生成',
+    th_metric:'指标',th_cur:'本次',th_std:'标准',th_diff:'差异',
+    m_peak:'峰值',m_peak_t:'峰值时刻',m_dur:'有效时长',m_rms:'RMS',
+    shot:'本次击球',std_saved:'已保存为标准模板：',std_reset:'已恢复内置标准模板',
+    std_loaded:'标准模板已导入',std_bad:'CSV 解析失败，需包含 t,ax,ay,az,gx,gy,gz 七列',
+    need_snap:'当前还没有可用的击球快照',
+  },
+  'zh-TW':{
+    title:'eillie · 智能乒乓球拍即時監控',
+    header_title:'智能乒乓球拍',header_sub:'Live Monitor',
+    conn_title:'連線球拍',
+    st_disconnected:'未連線 · 點右上角按鈕連線球拍',
+    st_connecting:'正在連線…',
+    st_connected:'已連線',
+    st_failed:'連線失敗 · 請確認球拍已開機並在附近',
+    st_disc:'連線已斷開 · 點右上角按鈕重新連線',
+    disc:'斷開',rec:'錄製原始數據',stop_rec:'停止錄製',
+    exp_a:'匯出動作記錄',exp_r:'匯出原始數據',clr:'清空會話',
+    total_strokes:'本局總擊球',unit_times:'次',unit_kmh:'km/h',unit_deg_s:'°/s',
+    recent_speed:'最近球速',realtime_gyro:'即時角速度',
+    waiting:'等待擊球事件…',
+    stroke_counts:'擊球類型統計',sub_stroke:'Stroke Counts',
+    accel:'三軸加速度',gyro:'三軸角速度',
+    action_log:'動作記錄',unit_entry:'條',
+    th_time:'時間',th_type:'類型',th_conf:'置信度',
+    th_peak:'峰值角速度',th_speed:'球速',th_total:'累計',
+    last_stroke:'最新擊球',conf:'置信度',speed:'球速',peak:'峰值',
+    no_ble:'目前瀏覽器不支援 Web Bluetooth，請使用 Chrome / Edge（桌面或安卓）',
+    ble_connected:'已連線：',ble_failed:'連線失敗：',
+    rec_started:'開始錄製原始數據',rec_stopped:'已停止錄製，共 ',
+    cleared:'會話已清空',
+    clr_title:'確認清空會話？',
+    clr_body:'將清空本頁顯示的全部計數、動作記錄與原始數據。',
+    clr_warn:'同時會下發指令清空球拍端的計數，設備計數歸零。此操作不可撤銷。',
+    clr_yes:'確認清空',clr_no:'取消',
+    clr_sent:'會話已清空 · 球拍計數已同步歸零',
+    clr_devfail:'網頁已清空，但球拍未回應（韌體可能未升級，不支援該指令）',
+    hint_browser:'<b>瀏覽器</b>：Chrome / Edge（桌面或安卓）；iOS 不支援 Web Bluetooth',
+    hint_connect:'<b>連線</b>：點右上角金色按鈕 → 選擇 <b>eillie-TT-Bat</b>',
+    hint_wave:'<b>波形</b>：滾動顯示最近 6 秒；<b>數據</b>來自裝置端，與 OLED 螢幕一致',
+    hint_time:'<b>時間</b>：動作記錄精確到毫秒；原始數據 t_ms 為開啟網頁後經過的毫秒數',
+    hint_export:'<b>匯出</b>：動作記錄 / 原始數據均可匯出 CSV，可直接用 Excel 開啟',
+    hint_snap:'<b>快照對比</b>：每次擊球自動截取擊球前 300 ms 至後 700 ms 的六軸數據，與標準動作曲線疊加對比並給出相似度評分',
+    cmp_title:'擊球快照與標準動作對比',
+    mode_gyro:'角速度',mode_acc:'加速度',mode_all:'全部6軸',
+    legend_cur:'本次擊球（實線）',legend_std:'標準動作（虛線）',hit_point:'擊球時刻 0 ms',
+    score_lab:'綜合相似度',
+    std_lab:'標準模板',std_src_lab:'來源',
+    std_builtin:'內建範例',std_custom:'實測保存',std_csv:'CSV 匯入',
+    btn_up:'上傳標準 CSV',btn_setstd:'用本次設為標準',btn_expstd:'匯出標準',btn_reset:'恢復內建',
+    snap_list:'最近擊球快照',
+    no_snap:'暫無快照：連線球拍並完成一次擊球後自動生成',
+    th_metric:'指標',th_cur:'本次',th_std:'標準',th_diff:'差異',
+    m_peak:'峰值',m_peak_t:'峰值時刻',m_dur:'有效時長',m_rms:'RMS',
+    shot:'本次擊球',std_saved:'已保存為標準模板：',std_reset:'已恢復內建標準模板',
+    std_loaded:'標準模板已匯入',std_bad:'CSV 解析失敗，需包含 t,ax,ay,az,gx,gy,gz 七欄',
+    need_snap:'目前還沒有可用的擊球快照',
+  }
+};
+const STROKE_NAME={en:EN,'zh-CN':CN,'zh-TW':TW};
+let curLang=localStorage.getItem('eillie_lang')||'zh-CN';
+function t(k){return(LANGS[curLang]&&LANGS[curLang][k])||LANGS.en[k]||k}
+function strokeName(i){return STROKE_NAME[curLang][i]||NAMES[i]}
+function applyLang(){
+  document.documentElement.lang=curLang;
+  document.title=t('title');
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const k=el.getAttribute('data-i18n');
+    // hint 条目含 HTML 标签，用 innerHTML；其余用 textContent
+    if(k.indexOf('hint_')===0) el.innerHTML=t(k);
+    else el.textContent=t(k);
+  });
+  $('bConn').title=t('conn_title');
+  $('bConn').setAttribute('aria-label',t('conn_title'));
+  drawStats();
+  rerenderTable();
+  renderStdType();
+  renderSnapList();
+  renderCmp();
+  ui();
+}
+
+let dev=null,connected=false,rawOn=false,pktCnt=0,lastPk=0;
+let cmdCh=null;   /* 可写指令特征，用于把"清空"等指令下发给设备（旧固件没有则为 null） */
+let bufA=[],bufG=[],stats=[0,0,0,0,0],events=[],raw=[];
+/* 快照与标准模板 */
+let pending=null,snapshots=[],curSnapId=null,cmpMode='gyro',curType=0,snapSeq=0;
+const STD_KEY='eillie_std_v1';
+let stdStore=(()=>{try{return JSON.parse(localStorage.getItem(STD_KEY)||'{}')||{}}catch(e){return{}}})();
+
+const $=id=>document.getElementById(id);
+const pad=(n,l)=>String(n).padStart(l,'0');
+const now=()=>{const d=new Date();return pad(d.getHours(),2)+':'+pad(d.getMinutes(),2)+':'+pad(d.getSeconds(),2)+'.'+pad(d.getMilliseconds(),3)};
+let toastTm=0;
+function toast(msg){
+  const t0=$('toast');t0.textContent=msg;t0.classList.add('show');
+  clearTimeout(toastTm);toastTm=setTimeout(()=>t0.classList.remove('show'),3600);
+}
+
+/* ---------------- BLE ---------------- */
+async function connect(){
+  if(!navigator.bluetooth){toast(t('no_ble'));return;}
+  try{
+    $('st').textContent=t('st_connecting');
+    dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'eillie-TT-Bat'}],optionalServices:[SVC]});
+    const g=await dev.gatt.connect();
+    const s=await g.getPrimaryService(SVC);
+    const imuCh=await s.getCharacteristic(CU);
+    const evtCh=await s.getCharacteristic(CE);
+    await imuCh.startNotifications();
+    await evtCh.startNotifications();
+    imuCh.addEventListener('characteristicvaluechanged',onIMU);
+    evtCh.addEventListener('characteristicvaluechanged',onEVT);
+    /* 指令特征可选：旧固件没有也不影响其它功能 */
+    cmdCh=null;
+    try{ cmdCh=await s.getCharacteristic(CC); }catch(e){ cmdCh=null; }
+    dev.addEventListener('gattserverdisconnected',onDisc);
+    connected=true;
+    toast(t('ble_connected')+(dev.name||'eillie-TT-Bat'));
+    ui();
+  }catch(e){
+    connected=false;
+    $('st').textContent=t('st_failed');
+    toast(t('ble_failed')+e.message);
+    ui();
+  }
+}
+function onDisc(){
+  connected=false;cmdCh=null;
+  $('st').textContent=t('st_disc');
+  ui();
+}
+function onIMU(e){
+  const v=e.target.value;
+  if(v.byteLength<12) return;
+  const a=[],gy=[];
+  for(let i=0;i<3;i++){
+    a.push(v.getInt16(i*2,true)*0.001);
+    gy.push(v.getInt16((i+3)*2,true)*0.1);
+  }
+  const tms=performance.now();
+  bufA.push([tms,a[0],a[1],a[2]]);
+  bufG.push([tms,gy[0],gy[1],gy[2]]);
+  /* 按时间保留最近 KEEP_MS 毫秒，保证 1 秒快照窗口数据完整 */
+  const cut=tms-KEEP_MS;
+  while(bufA.length && bufA[0][0]<cut) bufA.shift();
+  while(bufG.length && bufG[0][0]<cut) bufG.shift();
+  if(bufA.length>MAXP) bufA.shift();
+  if(bufG.length>MAXP) bufG.shift();
+  pktCnt++;
+  /* 击球后 700ms 数据到齐 → 生成静态快照 */
+  if(pending && tms>=pending.t+SNAP_POST) finishSnapshot();
+  if(rawOn) raw.push([tms.toFixed(0),a[0].toFixed(4),a[1].toFixed(4),a[2].toFixed(4),
+                       gy[0].toFixed(1),gy[1].toFixed(1),gy[2].toFixed(1)]);
+}
+function applyCounts(c){
+  stats=c;drawStats();
+  $('tot').firstChild.textContent=c.reduce((s,v)=>s+v,0);
+}
+function onEVT(e){
+  const str=new TextDecoder().decode(e.target.value),p=str.split(',');
+  if(p[0]==='E' && p.length>=11){
+    const idx=+p[1],conf=+p[2],peak=+p[3],spd=+p[4],tot=+p[5];
+    applyCounts([+p[6],+p[7],+p[8],+p[9],+p[10]]);
+    events.push({t:now(),idx,conf,peak,spd,tot});
+    $('lastEvt').innerHTML=t('last_stroke')+'：<b>'+strokeName(idx)+'</b>　'+t('conf')+' '+(conf/100).toFixed(2)+
+      '　'+t('speed')+' '+(spd/10).toFixed(1)+' km/h　'+t('peak')+' '+peak+' °/s';
+    appendRow(events[events.length-1]);
+    while($('tb').children.length>300) $('tb').lastChild.remove();
+    $('cnt').firstChild.textContent=events.length+' ';
+    $('lv').textContent=(spd/10).toFixed(1);
+    $('bExpA').disabled=false;
+    /* 事件包到达时只记录时刻，等待击球后 700ms 的 IMU 数据补齐后再截图 */
+    pending={t:performance.now(),tStr:now(),idx,conf,peak,spd,tot};
+  }else if(p[0]==='S' && p.length>=9){
+    applyCounts([+p[1],+p[2],+p[3],+p[4],+p[5]]);
+    $('tot').firstChild.textContent=+p[6];
+    $('lgv').textContent=+p[7];
+    $('lv').textContent=(+p[8]/10).toFixed(1);
+  }
+}
+function appendRow(ev){
+  const tr=document.createElement('tr');
+  tr.innerHTML='<td>'+ev.t+'</td><td>'+strokeName(ev.idx)+'</td><td>'+(ev.conf/100).toFixed(2)+
+    '</td><td>'+ev.peak+' °/s</td><td>'+(ev.spd/10).toFixed(1)+' km/h</td><td>'+ev.tot+'</td>';
+  $('tb').prepend(tr);
+}
+function rerenderTable(){
+  const tb=$('tb');if(!tb)return;
+  tb.innerHTML='';
+  for(const ev of events) appendRow(ev);
+}
+
+/* ============ 击球快照：截取 -300ms ~ +700ms 并重采样 ============ */
+function sliceRows(buf,t0,t1){
+  const out=[];
+  for(const r of buf) if(r[0]>=t0&&r[0]<=t1) out.push(r);
+  return out;
+}
+function resample(rows,t0,t1,N,col){
+  const out=new Array(N).fill(0);
+  if(!rows.length) return out;
+  let j=0;
+  for(let k=0;k<N;k++){
+    const tt=t0+(t1-t0)*k/(N-1);
+    while(j<rows.length-1 && rows[j+1][0]<tt) j++;
+    const r0=rows[j],r1=rows[j+1]||rows[j];
+    const dt=r1[0]-r0[0];
+    let f=dt>0?(tt-r0[0])/dt:0;
+    f=Math.max(0,Math.min(1,f));
+    out[k]=r0[col]+(r1[col]-r0[col])*f;
+  }
+  return out;
+}
+function finishSnapshot(){
+  const p=pending;pending=null;
+  if(!p) return;
+  const t0=p.t-SNAP_PRE,t1=p.t+SNAP_POST;
+  const ra=sliceRows(bufA,t0,t1),rg=sliceRows(bufG,t0,t1);
+  if(rg.length<3) return;
+  const snap={id:++snapSeq,t:p.tStr||now(),idx:p.idx,conf:p.conf,peak:p.peak,spd:p.spd,tot:p.tot,
+    ax:resample(ra,t0,t1,SNAP_N,1),ay:resample(ra,t0,t1,SNAP_N,2),az:resample(ra,t0,t1,SNAP_N,3),
+    gx:resample(rg,t0,t1,SNAP_N,1),gy:resample(rg,t0,t1,SNAP_N,2),gz:resample(rg,t0,t1,SNAP_N,3)};
+  snap.magA=magOf(snap.ax,snap.ay,snap.az);
+  snap.magG=magOf(snap.gx,snap.gy,snap.gz);
+  snapshots.unshift(snap);
+  if(snapshots.length>12) snapshots.pop();
+  curType=snap.idx;curSnapId=snap.id;
+  renderStdType();renderSnapList();renderCmp();
+}
+function magOf(a,b,c){return a.map((v,i)=>Math.sqrt(v*v+b[i]*b[i]+c[i]*c[i]))}
+
+/* ============ 标准动作模板：内置(实测均值) / 实测保存 / CSV 导入 ============
+   内置模板由 Training-Testing-Data 的实测样本生成：
+     · 以 |ω| 峰值帧为击球时刻(0ms)，取 -300ms ~ +700ms 重采样 100 点
+     · 各类别对所有样本逐点求平均（对齐与插值口径与 parseStdCSV 完全一致）
+   由 _analysis/gen_std.py 生成，改数据后重跑该脚本即可。           */
+const STD_REAL={
+  BHdrive:{ax:[-0.036,-0.038,-0.041,-0.043,-0.045,-0.055,-0.066,-0.091,-0.116,-0.146,-0.177,-0.228,-0.281,-0.351,-0.422,-0.495,-0.578,-0.708,-0.835,-0.95,-1.061,-1.153,-1.242,-1.317,-1.387,-1.444,-1.503,-1.567,-1.671,-1.88,-2.025,-2.021,-2.005,-1.969,-1.899,-1.764,-1.571,-1.274,-1.018,-0.83,-0.63,-0.411,-0.225,-0.083,0.033,0.117,0.181,0.224,0.254,0.273,0.278,0.271,0.264,0.257,0.135,0.134,0.088,0.087,0.06,0.06,0.035,0.035,0.009,0.009,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],ay:[1.027,1.036,1.083,1.105,1.127,1.174,1.223,1.311,1.399,1.49,1.583,1.701,1.82,1.956,2.085,2.174,2.27,2.401,2.521,2.593,2.643,2.604,2.543,2.407,2.249,2.022,1.793,1.562,1.291,0.918,0.635,0.56,0.459,0.3,0.163,0.067,-0.02,-0.091,-0.152,-0.197,-0.229,-0.243,-0.224,-0.159,-0.1,-0.048,0.015,0.088,0.158,0.223,0.269,0.298,0.321,0.337,0.187,0.192,0.131,0.133,0.094,0.094,0.054,0.054,0.013,0.013,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],az:[0.683,0.684,0.71,0.709,0.708,0.704,0.7,0.685,0.67,0.655,0.639,0.617,0.593,0.552,0.509,0.451,0.391,0.323,0.254,0.188,0.127,0.089,0.073,0.134,0.215,0.361,0.514,0.69,0.916,1.27,1.553,1.671,1.766,1.808,1.825,1.791,1.725,1.603,1.481,1.36,1.247,1.147,1.031,0.892,0.78,0.704,0.64,0.588,0.557,0.55,0.556,0.574,0.582,0.582,0.312,0.313,0.209,0.209,0.146,0.146,0.084,0.084,0.021,0.021,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],gx:[33,32,34,34,34,35,35,34,32,32,31,29,25,17,10,5,-1,-11,-22,-34,-48,-71,-95,-124,-154,-186,-210,-214,-218,-223,-223,-215,-201,-176,-165,-180,-190,-189,-190,-193,-187,-170,-151,-130,-111,-96,-82,-70,-60,-50,-43,-38,-34,-31,-16,-16,-11,-11,-8,-8,-4,-4,-1,-1,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0],gy:[154,155,162,164,167,172,177,183,190,197,204,209,213,215,215,209,202,185,166,137,103,49,-6,-66,-129,-203,-267,-306,-348,-399,-431,-418,-400,-371,-335,-288,-233,-163,-103,-59,-22,6,26,34,40,41,39,32,26,23,23,27,31,33,19,19,14,14,10,10,6,6,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],gz:[176,176,184,185,187,188,189,191,192,194,195,194,192,187,181,169,156,135,110,68,23,-40,-104,-173,-247,-338,-421,-479,-540,-612,-655,-630,-596,-540,-473,-381,-291,-206,-134,-84,-42,-10,15,33,45,51,52,48,45,45,48,56,61,64,35,36,25,26,18,18,10,10,3,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
+  BHsmash:{ax:[0.031,0.031,0.072,0.072,0.16,0.159,0.157,0.154,0.15,0.14,0.13,0.126,0.12,0.103,0.085,0.064,0.038,-0.011,-0.062,-0.123,-0.21,-0.402,-0.632,-0.992,-1.336,-1.63,-1.897,-2.092,-2.365,-2.836,-3.179,-3.218,-3.213,-3.112,-2.911,-2.513,-1.95,-1.095,-0.407,0.008,0.351,0.587,0.741,0.782,0.777,0.714,0.652,0.591,0.541,0.501,0.465,0.433,0.401,0.371,0.351,0.339,0.159,0.158,0.032,0.032,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],ay:[0.202,0.203,0.473,0.475,1.062,1.071,1.079,1.1,1.123,1.167,1.216,1.307,1.399,1.503,1.608,1.724,1.86,2.097,2.337,2.592,2.846,3.091,3.268,3.204,3.119,2.969,2.799,2.571,2.106,1.028,0.184,-0.117,-0.442,-0.817,-1.022,-0.894,-0.759,-0.609,-0.432,-0.21,0.055,0.385,0.687,0.951,1.158,1.293,1.365,1.362,1.348,1.32,1.276,1.216,1.167,1.128,1.108,1.104,0.528,0.525,0.105,0.105,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],az:[0.147,0.147,0.344,0.344,0.769,0.77,0.772,0.781,0.79,0.808,0.823,0.814,0.805,0.799,0.785,0.72,0.646,0.514,0.349,0.034,-0.333,-0.904,-1.419,-1.73,-1.961,-1.94,-1.85,-1.563,-1.032,0.13,1.11,1.665,2.209,2.727,2.932,2.527,2.155,1.841,1.58,1.403,1.211,0.996,0.831,0.736,0.662,0.616,0.579,0.554,0.55,0.57,0.599,0.637,0.662,0.674,0.678,0.676,0.323,0.322,0.064,0.064,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],gx:[8,8,20,20,44,45,46,48,49,52,55,59,63,66,69,74,78,82,85,86,85,81,74,57,32,-16,-83,-204,-341,-520,-615,-511,-399,-268,-160,-95,-60,-77,-83,-70,-50,-20,9,37,56,65,66,59,48,35,24,16,12,12,13,14,7,8,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],gy:[26,26,61,61,137,139,141,145,148,155,162,173,185,198,211,226,242,258,274,291,306,315,310,259,194,84,-50,-249,-443,-625,-741,-700,-637,-527,-407,-264,-133,-22,45,37,24,4,-13,-26,-35,-39,-39,-34,-28,-20,-10,1,9,16,22,27,14,14,3,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],gz:[22,22,51,51,113,114,114,115,116,117,118,122,126,131,136,141,146,153,161,167,170,162,143,85,20,-69,-165,-282,-388,-466,-513,-490,-447,-363,-265,-139,-8,129,213,209,189,145,95,36,-7,-30,-40,-36,-28,-17,-6,5,11,13,17,21,11,11,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
+  FHdrive:{ax:[-0.788,-0.726,-0.665,-0.621,-0.577,-0.524,-0.471,-0.427,-0.386,-0.367,-0.35,-0.361,-0.379,-0.455,-0.529,-0.592,-0.665,-0.798,-0.93,-1.056,-1.202,-1.424,-1.642,-1.845,-2.055,-2.284,-2.501,-2.682,-2.888,-3.159,-3.266,-2.994,-2.794,-2.749,-2.69,-2.601,-2.497,-2.368,-2.276,-2.243,-2.207,-2.168,-2.134,-2.107,-1.979,-1.948,-1.756,-1.71,-1.534,-1.523,-1.441,-1.433,-1.209,-1.196,-0.84,-0.838,-0.627,-0.627,-0.487,-0.487,-0.487,-0.487,-0.488,-0.488,-0.487,-0.487,-0.487,-0.487,-0.421,-0.426,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0],ay:[1.845,1.917,1.988,2.04,2.091,2.127,2.161,2.166,2.176,2.247,2.316,2.377,2.441,2.539,2.635,2.721,2.817,2.963,3.101,3.198,3.296,3.399,3.494,3.563,3.626,3.672,3.706,3.705,3.703,3.7,3.582,3.198,2.882,2.711,2.543,2.382,2.211,2.023,1.889,1.841,1.807,1.797,1.792,1.795,1.705,1.691,1.533,1.498,1.35,1.35,1.291,1.301,1.106,1.098,0.773,0.774,0.583,0.587,0.459,0.459,0.46,0.461,0.461,0.461,0.461,0.462,0.463,0.464,0.403,0.409,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],az:[-0.17,-0.14,-0.11,-0.075,-0.038,0.019,0.074,0.1,0.129,0.197,0.266,0.343,0.416,0.467,0.522,0.598,0.671,0.726,0.776,0.805,0.812,0.733,0.645,0.523,0.389,0.213,0.011,-0.267,-0.587,-1.015,-1.345,-1.443,-1.522,-1.563,-1.586,-1.572,-1.539,-1.472,-1.415,-1.373,-1.332,-1.29,-1.251,-1.214,-1.129,-1.113,-1.008,-0.991,-0.895,-0.891,-0.841,-0.83,-0.697,-0.691,-0.484,-0.481,-0.359,-0.356,-0.276,-0.276,-0.275,-0.274,-0.274,-0.273,-0.273,-0.272,-0.272,-0.271,-0.231,-0.23,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0],gx:[-49,-46,-42,-36,-30,-19,-8,-3,3,11,18,25,33,44,54,59,65,75,84,94,105,123,141,160,178,194,210,228,246,264,271,254,240,234,227,216,203,187,175,170,165,160,155,152,142,139,125,122,109,108,102,100,84,82,57,57,43,42,33,33,33,33,33,33,33,33,33,33,28,29,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],gy:[-175,-175,-175,-175,-174,-170,-165,-160,-155,-147,-139,-129,-118,-98,-79,-63,-45,-19,6,28,51,81,110,140,168,193,216,233,248,257,251,209,175,160,145,130,113,92,78,75,71,67,64,62,58,55,49,48,43,44,42,41,34,32,22,22,16,16,12,12,12,12,12,12,12,12,12,12,11,11,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],gz:[120,107,93,81,69,47,26,10,-6,-28,-49,-69,-89,-115,-139,-156,-176,-204,-231,-251,-273,-307,-340,-372,-405,-439,-472,-503,-537,-576,-584,-519,-471,-459,-443,-418,-388,-348,-320,-311,-301,-293,-285,-278,-258,-253,-226,-218,-194,-193,-183,-181,-152,-149,-104,-103,-78,-78,-61,-61,-61,-61,-61,-61,-61,-61,-61,-62,-54,-55,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0]},
+  FHloop:{ax:[-1.161,-1.114,-1.067,-1.015,-0.962,-0.891,-0.819,-0.755,-0.69,-0.632,-0.577,-0.552,-0.53,-0.537,-0.558,-0.668,-0.786,-0.952,-1.142,-1.445,-1.736,-1.977,-2.205,-2.387,-2.586,-2.84,-3.064,-3.205,-3.346,-3.486,-3.503,-3.232,-3.028,-2.968,-2.885,-2.757,-2.655,-2.597,-2.544,-2.499,-2.443,-2.42,-2.319,-2.301,-2.205,-2.188,-2.093,-2.077,-2.067,-2.063,-2.055,-2.043,-2.041,-2.049,-1.9,-1.899,-1.836,-1.861,-1.871,-1.87,-1.73,-1.757,-1.683,-1.677,-1.36,-1.368,-1.38,-1.394,-0.575,-0.574,-0.082,-0.082,-0.082,-0.082,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0],ay:[1.715,1.776,1.835,1.857,1.879,1.901,1.925,1.975,2.026,2.089,2.156,2.263,2.372,2.489,2.608,2.743,2.87,2.958,3.048,3.142,3.226,3.273,3.32,3.367,3.423,3.506,3.571,3.582,3.57,3.498,3.344,2.997,2.721,2.595,2.47,2.346,2.27,2.276,2.271,2.247,2.213,2.21,2.15,2.186,2.133,2.139,2.058,2.042,2.032,2.029,2.031,2.037,2.059,2.093,1.955,1.958,1.893,1.913,1.916,1.907,1.761,1.787,1.71,1.702,1.381,1.389,1.4,1.413,0.585,0.587,0.084,0.084,0.084,0.084,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],az:[0.141,0.155,0.169,0.163,0.157,0.143,0.131,0.136,0.142,0.165,0.188,0.204,0.23,0.329,0.431,0.547,0.662,0.767,0.858,0.888,0.9,0.837,0.75,0.573,0.36,0.029,-0.293,-0.592,-0.897,-1.22,-1.414,-1.307,-1.206,-1.118,-1.055,-1.041,-1.034,-1.039,-1.038,-1.027,-1.014,-1.021,-0.982,-0.962,-0.911,-0.895,-0.858,-0.865,-0.871,-0.876,-0.881,-0.885,-0.877,-0.858,-0.783,-0.778,-0.738,-0.725,-0.716,-0.71,-0.643,-0.634,-0.599,-0.595,-0.479,-0.476,-0.476,-0.478,-0.195,-0.192,-0.027,-0.027,-0.027,-0.027,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0],gx:[-48,-46,-44,-38,-31,-29,-26,-25,-24,-21,-19,-22,-24,-24,-24,-23,-22,-13,-3,13,29,45,62,78,97,126,147,147,145,140,132,115,103,103,103,104,104,102,102,104,104,104,98,93,88,89,87,88,88,88,87,86,85,84,78,78,75,76,76,76,70,71,68,67,54,54,55,55,23,22,3,3,3,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],gy:[-162,-161,-161,-162,-163,-162,-160,-157,-154,-153,-151,-146,-141,-136,-129,-120,-109,-88,-63,-24,12,35,56,72,91,121,145,153,157,151,134,92,59,45,35,34,34,36,37,34,32,31,30,30,30,31,31,32,33,34,35,37,37,37,33,33,32,33,34,34,32,33,32,32,26,26,27,28,11,11,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],gz:[214,204,193,182,171,153,136,122,107,92,77,62,46,25,3,-23,-52,-92,-137,-208,-277,-335,-389,-428,-477,-552,-621,-671,-729,-806,-828,-719,-634,-596,-556,-510,-478,-469,-461,-452,-445,-448,-436,-441,-430,-431,-417,-417,-418,-419,-420,-422,-423,-426,-396,-397,-383,-386,-387,-387,-356,-358,-343,-342,-277,-277,-279,-282,-116,-115,-16,-16,-16,-16,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0]},
+  FHsmash:{ax:[-0.165,-0.157,-0.149,-0.143,-0.136,-0.131,-0.125,-0.113,-0.101,-0.088,-0.077,-0.086,-0.091,-0.058,-0.044,-0.136,-0.264,-0.575,-0.902,-1.299,-1.742,-2.372,-2.922,-3.194,-3.44,-3.603,-3.731,-3.758,-3.795,-3.857,-3.898,-3.888,-3.87,-3.838,-3.781,-3.679,-3.547,-3.363,-3.126,-2.802,-2.494,-2.209,-1.929,-1.655,-1.385,-1.119,-0.931,-0.835,-0.751,-0.68,-0.635,-0.618,-0.607,-0.603,-0.595,-0.585,-0.419,-0.416,-0.354,-0.352,-0.097,-0.097,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0],ay:[1.587,1.606,1.624,1.65,1.675,1.704,1.734,1.775,1.816,1.858,1.905,2.003,2.105,2.242,2.389,2.594,2.813,3.103,3.374,3.554,3.719,3.822,3.904,3.908,3.901,3.859,3.809,3.741,3.668,3.588,3.483,3.318,3.037,2.51,2.024,1.617,1.21,0.803,0.502,0.376,0.277,0.22,0.218,0.293,0.381,0.484,0.575,0.649,0.713,0.765,0.809,0.845,0.863,0.866,0.882,0.911,0.667,0.666,0.578,0.591,0.166,0.166,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],az:[-0.147,-0.137,-0.127,-0.118,-0.108,-0.087,-0.066,-0.038,-0.009,0.029,0.072,0.161,0.261,0.448,0.658,1.006,1.379,1.888,2.355,2.628,2.848,2.858,2.779,2.388,1.929,1.251,0.587,-0.037,-0.744,-1.664,-2.344,-2.466,-2.565,-2.616,-2.655,-2.671,-2.71,-2.791,-2.834,-2.812,-2.77,-2.697,-2.614,-2.516,-2.381,-2.198,-2.046,-1.931,-1.821,-1.718,-1.623,-1.536,-1.473,-1.431,-1.375,-1.306,-0.913,-0.895,-0.746,-0.722,-0.198,-0.198,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0],gx:[-56,-54,-53,-53,-54,-54,-53,-51,-50,-47,-44,-43,-42,-41,-40,-38,-35,-30,-18,26,79,164,244,302,356,401,436,441,434,397,375,385,385,365,350,342,329,309,287,262,240,222,203,183,161,135,115,103,94,89,83,75,69,66,61,55,37,37,30,28,7,7,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],gy:[-184,-184,-185,-185,-185,-185,-185,-185,-184,-182,-180,-174,-169,-172,-175,-176,-175,-165,-146,-90,-18,121,258,385,508,617,712,767,817,857,869,813,734,605,485,380,281,193,123,82,51,33,20,16,11,5,-0,-5,-9,-12,-17,-26,-32,-37,-43,-51,-40,-41,-37,-39,-11,-11,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0,-0],gz:[3,1,-1,-4,-6,-10,-14,-20,-26,-32,-38,-44,-50,-52,-53,-56,-60,-70,-84,-114,-151,-221,-294,-377,-460,-540,-612,-663,-729,-833,-896,-866,-828,-775,-712,-627,-537,-437,-346,-268,-195,-131,-80,-45,-15,10,25,29,35,41,43,42,41,42,40,36,25,25,20,18,5,5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}
+};
+
+function builtinStd(i){
+  const o=STD_REAL[NAMES[i]],r={};
+  if(o) for(const k of ['ax','ay','az','gx','gy','gz']) r[k]=o[k].slice();
+  return r;
+}
+function stdOf(i){
+  const s=stdStore[NAMES[i]];
+  const o=s?{ax:s.ax,ay:s.ay,az:s.az,gx:s.gx,gy:s.gy,gz:s.gz}:builtinStd(i);
+  o.magA=magOf(o.ax,o.ay,o.az);o.magG=magOf(o.gx,o.gy,o.gz);
+  return o;
+}
+function stdSource(i){
+  const s=stdStore[NAMES[i]];
+  return s?(s.src==='csv'?t('std_csv'):t('std_custom')):t('std_builtin');
+}
+function saveStd(i,obj,src){
+  stdStore[NAMES[i]]={ax:obj.ax,ay:obj.ay,az:obj.az,gx:obj.gx,gy:obj.gy,gz:obj.gz,src:src};
+  try{localStorage.setItem(STD_KEY,JSON.stringify(stdStore))}catch(e){}
+}
+function parseStdCSV(text){
+  const rows=[];
+  for(const line of text.split(/\r?\n/)){
+    if(!line.trim()) continue;
+    const v=line.split(',').map(s=>Number(s.trim()));
+    if(v.length<7 || v.slice(0,7).some(isNaN)) continue;
+    rows.push(v.slice(0,7));
+  }
+  if(rows.length<5) return null;
+  let bi=0,bv=-1;
+  rows.forEach((r,i)=>{const m=Math.sqrt(r[4]*r[4]+r[5]*r[5]+r[6]*r[6]);if(m>bv){bv=m;bi=i}});
+  const tc=rows[bi][0],t0=tc-SNAP_PRE,t1=tc+SNAP_POST;
+  const keys=['ax','ay','az','gx','gy','gz'],o={};
+  keys.forEach((k,n)=>{o[k]=resample(rows.map(r=>[r[0],r[n+1]]),t0,t1,SNAP_N,1)});
+  return o;
+}
+
+/* ============ 相似度与指标 ============ */
+function simScore(a,b){
+  const n=Math.min(a.length,b.length);let ma=0,mb=0;
+  for(let i=0;i<n;i++){ma+=a[i];mb+=b[i]}
+  ma/=n;mb/=n;
+  let sa=0,sb=0,sab=0;
+  for(let i=0;i<n;i++){const da=a[i]-ma,db=b[i]-mb;sa+=da*da;sb+=db*db;sab+=da*db}
+  const r=(sa>1e-9&&sb>1e-9)?sab/Math.sqrt(sa*sb):0;
+  const shape=Math.max(0,Math.min(1,(r+1)/2));
+  let pa=0,pb=0;
+  for(let i=0;i<n;i++){pa=Math.max(pa,Math.abs(a[i]));pb=Math.max(pb,Math.abs(b[i]))}
+  const amp=(pa+pb>1e-9)?Math.max(0,1-Math.abs(pa-pb)/Math.max(pa,pb)):1;
+  return {score:Math.round((0.65*shape+0.35*amp)*100),shape:Math.round(shape*100),amp:Math.round(amp*100)};
+}
+function mPeak(arr){let p=0,i=0;for(let k=0;k<arr.length;k++){const v=Math.abs(arr[k]);if(v>p){p=v;i=k}}return {v:p,ms:Math.round(-SNAP_PRE+i*SNAP_DT)}}
+function mDur(arr){let p=0;for(const v of arr)p=Math.max(p,Math.abs(v));
+  let n=0;for(const v of arr)if(Math.abs(v)>=p*0.2)n++;return Math.round(n*SNAP_DT)}
+function mRms(arr){let s=0;for(const v of arr)s+=v*v;return Math.sqrt(s/arr.length)}
+
+/* ---------------- 渲染 ---------------- */
+function drawStats(){
+  if(!$('s0')){
+    $('stats').innerHTML=CN.map((n,i)=>
+      '<div class="scard"><div class="h"><span class="cn" id="cn'+i+'">'+n+'</span><span class="en" id="en'+i+'">'+EN[i]+'</span></div>'+
+      '<div class="row"><div><span class="v" id="c'+i+'">0</span><span class="u" data-i18n="unit_times">次</span></div>'+
+      '<div class="pct" id="p'+i+'">0%</div></div>'+
+      '<div class="trk"><i id="s'+i+'"></i></div></div>').join('');
+  }
+  // 语言切换：中文模式显示中(主)+英(副)；英文模式只显示英文
+  for(let i=0;i<5;i++){
+    const cnEl=$('cn'+i),enEl=$('en'+i);
+    if(curLang==='en'){
+      cnEl.textContent=EN[i];enEl.style.display='none';
+    }else{
+      cnEl.textContent=strokeName(i);enEl.style.display='';enEl.textContent=EN[i];
+    }
+  }
+  const sum=stats.reduce((a,b)=>a+b,0),mx=Math.max(1,...stats);
+  for(let i=0;i<5;i++){
+    $('s'+i).style.width=(stats[i]/mx*100)+'%';
+    $('c'+i).textContent=stats[i];
+    $('p'+i).textContent=(sum?Math.round(stats[i]/sum*100):0)+'%';
+  }
+}
+function fit(cv){
+  const r=cv.getBoundingClientRect(),d=window.devicePixelRatio||1;
+  const w=Math.max(1,Math.round(r.width*d)),h=Math.max(1,Math.round(r.height*d));
+  if(cv.width!==w||cv.height!==h){cv.width=w;cv.height=h;}
+}
+function drawWave(cv,buf,sc){
+  fit(cv);
+  const x=cv.getContext('2d'),W=cv.width,H=cv.height,d=window.devicePixelRatio||1;
+  x.clearRect(0,0,W,H);
+  x.strokeStyle='rgba(255,255,255,.07)';x.lineWidth=Math.max(1,d*.7);
+  for(let i=1;i<4;i++){const y=H*i/4;x.beginPath();x.moveTo(0,y);x.lineTo(W,y);x.stroke();}
+  x.strokeStyle='rgba(255,255,255,.16)';
+  x.beginPath();x.moveTo(0,H/2);x.lineTo(W,H/2);x.stroke();
+  if(buf.length<2) return;
+  const t1=buf[buf.length-1][0],t0=t1-Math.max(6000,t1-buf[0][0]);
+  const px=t=>(t-t0)/(t1-t0)*W;
+  for(let s=0;s<3;s++){
+    x.strokeStyle=AXC[s];x.lineWidth=Math.max(1.4,d*1.3);
+    x.lineJoin='round';x.lineCap='round';x.beginPath();
+    let on=false;
+    for(const r of buf){
+      const v=r[s+1];
+      if(v>sc||v<-sc){on=false;continue}
+      const y=H/2-v/sc*(H/2-H*0.04);
+      on?x.lineTo(px(r[0]),y):(x.moveTo(px(r[0]),y),on=true);
+    }
+    x.stroke();
+  }
+}
+function loop(){drawWave($('cA'),bufA,4);drawWave($('cG'),bufG,2000);requestAnimationFrame(loop)}
+
+/* ---------------- 快照对比渲染 ---------------- */
+function cmpAxes(){
+  const A=[{k:'ax',n:'aX',c:AXC[0],u:'g'},{k:'ay',n:'aY',c:AXC[1],u:'g'},{k:'az',n:'aZ',c:AXC[2],u:'g'}];
+  const G=[{k:'gx',n:'gX',c:GYC[0],u:'°/s'},{k:'gy',n:'gY',c:GYC[1],u:'°/s'},{k:'gz',n:'gZ',c:GYC[2],u:'°/s'}];
+  if(cmpMode==='acc') return A.map(a=>({k:a.k,n:a.n.slice(1),c:a.c,u:a.u}));
+  if(cmpMode==='all') return A.concat(G);
+  return G.map((g,i)=>({k:g.k,n:['X','Y','Z'][i],c:AXC[i],u:'°/s'}));
+}
+function curSnapObj(){return snapshots.find(s=>s.id===curSnapId)||null}
+
+function drawCmp(){
+  const cv=$('cCmp');if(!cv)return;
+  fit(cv);
+  const x=cv.getContext('2d'),W=cv.width,H=cv.height,d=window.devicePixelRatio||1;
+  x.clearRect(0,0,W,H);
+  const snap=curSnapObj(),std=stdOf(curType),axes=cmpAxes();
+  x.strokeStyle='rgba(255,255,255,.07)';x.lineWidth=Math.max(1,d*.7);
+  for(let i=1;i<4;i++){const y=H*i/4;x.beginPath();x.moveTo(0,y);x.lineTo(W,y);x.stroke();}
+  x.strokeStyle='rgba(255,255,255,.16)';
+  x.beginPath();x.moveTo(0,H/2);x.lineTo(W,H/2);x.stroke();
+  const x0=W*SNAP_PRE/(SNAP_PRE+SNAP_POST);
+  x.strokeStyle='rgba(245,210,26,.7)';x.lineWidth=Math.max(1,d);
+  x.setLineDash([Math.round(4*d),Math.round(4*d)]);
+  x.beginPath();x.moveTo(x0,0);x.lineTo(x0,H);x.stroke();x.setLineDash([]);
+  x.fillStyle='rgba(147,165,196,.85)';x.font=Math.round(10*d)+'px system-ui,sans-serif';x.textAlign='center';
+  x.fillText('-300',Math.max(20*d,x0*0.4),H-5*d);
+  x.textAlign='right';
+  x.fillText('0',x0-5*d,H-5*d);
+  x.textAlign='center';
+  x.fillText('+700',Math.min(W-22*d,x0+(W-x0)*0.72),H-5*d);
+  x.textAlign='left';
+  let mx=0;
+  for(const a of axes){
+    for(const v of std[a.k]) mx=Math.max(mx,Math.abs(v));
+    if(snap) for(const v of snap[a.k]) mx=Math.max(mx,Math.abs(v));
+  }
+  mx=mx*1.15||1;
+  const px=i=>W*i/(SNAP_N-1), py=v=>H/2-v/mx*(H/2-H*0.17);
+  for(const a of axes){
+    x.strokeStyle=a.c;x.globalAlpha=.45;x.lineWidth=Math.max(1.1,d);
+    x.setLineDash([Math.round(5*d),Math.round(4*d)]);
+    x.beginPath();
+    std[a.k].forEach((v,i)=>{i?x.lineTo(px(i),py(v)):x.moveTo(px(i),py(v))});
+    x.stroke();x.setLineDash([]);
+    if(snap){
+      x.globalAlpha=1;x.lineWidth=Math.max(1.6,d*1.5);x.lineJoin='round';x.lineCap='round';
+      x.beginPath();
+      snap[a.k].forEach((v,i)=>{i?x.lineTo(px(i),py(v)):x.moveTo(px(i),py(v))});
+      x.stroke();
+    }
+  }
+  x.globalAlpha=1;
+}
+function drawThumb(cv,s){
+  if(!cv||!s)return;
+  fit(cv);
+  const x=cv.getContext('2d'),W=cv.width,H=cv.height,d=window.devicePixelRatio||1;
+  x.clearRect(0,0,W,H);
+  let mx=0;for(const v of s.magG) mx=Math.max(mx,v);
+  mx=mx||1;
+  const x0=W*SNAP_PRE/(SNAP_PRE+SNAP_POST);
+  x.strokeStyle='rgba(245,210,26,.55)';x.lineWidth=Math.max(1,d);
+  x.setLineDash([Math.round(3*d),Math.round(3*d)]);
+  x.beginPath();x.moveTo(x0,0);x.lineTo(x0,H);x.stroke();x.setLineDash([]);
+  x.strokeStyle='#ffd54a';x.lineWidth=Math.max(1.2,d*1.3);x.lineJoin='round';x.beginPath();
+  const n=s.magG.length;
+  s.magG.forEach((v,i)=>{
+    const px=W*i/(n-1),py=H-H*0.1-v/mx*(H*0.8);
+    i?x.lineTo(px,py):x.moveTo(px,py);
+  });
+  x.stroke();
+}
+function renderStdType(){
+  const sel=$('stdType');if(!sel)return;
+  sel.innerHTML=NAMES.map((n,i)=>'<option value="'+i+'">'+strokeName(i)+'</option>').join('');
+  sel.value=curType;
+  $('stdSrc').textContent=stdSource(curType);
+}
+function renderSnapList(){
+  const box=$('snaps');if(!box)return;
+  if(!snapshots.length){
+    box.innerHTML='<div class="emptymsg" style="grid-column:1/-1">'+t('no_snap')+'</div>';
+    return;
+  }
+  box.innerHTML=snapshots.map(s=>
+    '<div class="snap'+(s.id===curSnapId?' on':'')+'" data-id="'+s.id+'">'+
+    '<canvas></canvas>'+
+    '<div class="m"><b>'+strokeName(s.idx)+'</b><span>'+(s.spd/10).toFixed(1)+' km/h</span></div>'+
+    '<div class="m"><span>'+s.t+'</span></div></div>').join('');
+  box.querySelectorAll('.snap').forEach(el=>{
+    const s=snapshots.find(v=>v.id===+el.dataset.id);
+    el.onclick=()=>{curSnapId=s.id;curType=s.idx;renderStdType();renderSnapList();renderCmp()};
+    drawThumb(el.querySelector('canvas'),s);
+  });
+}
+function renderCmp(){
+  if(!$('cCmp'))return;
+  const snap=curSnapObj(),std=stdOf(curType),axes=cmpAxes();
+  drawCmp();
+  const bars=$('axBars');
+  if(snap){
+    let sum=0;
+    bars.innerHTML=axes.map(a=>{
+      const s=simScore(snap[a.k],std[a.k]);sum+=s.score;
+      return '<div class="axbar" style="color:'+a.c+'"><span class="nm">'+a.n+'</span>'+
+             '<span class="tk"><i style="width:'+s.score+'%"></i></span>'+
+             '<span class="vv">'+s.score+'%</span></div>';
+    }).join('');
+    const avg=Math.round(sum/axes.length),el=$('scoreNum');
+    el.textContent=avg+'%';
+    el.style.color=avg>=80?'#6fe3b4':(avg>=60?'var(--gold)':'#ff8a8a');
+  }else{
+    bars.innerHTML='';
+    $('scoreNum').textContent='--';
+    $('scoreNum').style.color='var(--dim)';
+  }
+  const body=$('cmpBody'),sd=(a,b)=>(a-b>=0?'+':'')+(Math.round((a-b)*100)/100);
+  if(!snap){
+    body.innerHTML='<tr><td colspan="4" style="color:var(--dim)">'+t('no_snap')+'</td></tr>';
+  }else{
+    const rows=[];
+    for(const a of axes){
+      const p1=mPeak(snap[a.k]),p2=mPeak(std[a.k]);
+      rows.push([t('m_peak')+' '+a.n+' ('+a.u+')',p1.v.toFixed(2),p2.v.toFixed(2),sd(p1.v,p2.v)]);
+    }
+    const km=cmpMode==='acc'?'magA':'magG',u=cmpMode==='acc'?'g':'°/s';
+    const p1=mPeak(snap[km]),p2=mPeak(std[km]);
+    rows.push([t('m_peak')+' · '+(cmpMode==='acc'?'|a|':'|ω|')+' ('+u+')',p1.v.toFixed(2),p2.v.toFixed(2),sd(p1.v,p2.v)]);
+    rows.push([t('m_peak_t')+' (ms)',p1.ms,p2.ms,sd(p1.ms,p2.ms)]);
+    rows.push([t('m_dur')+' (ms)',mDur(snap[km]),mDur(std[km]),sd(mDur(snap[km]),mDur(std[km]))]);
+    rows.push([t('m_rms')+' ('+u+')',mRms(snap[km]).toFixed(2),mRms(std[km]).toFixed(2),sd(mRms(snap[km]),mRms(std[km]))]);
+    body.innerHTML=rows.map(r=>'<tr><td>'+r[0]+'</td><td>'+r[1]+'</td><td>'+r[2]+'</td><td>'+r[3]+'</td></tr>').join('');
+  }
+  $('stdSrc').textContent=stdSource(curType);
+}
+
+/* ---------------- UI 状态 ---------------- */
+function ui(){
+  $('bConn').disabled=connected;
+  $('bConn').title=t('conn_title');
+  $('icConn').innerHTML=connected
+    ? '<path d="M20 6L9 17l-5-5"/>'
+    : '<path d="M7 7l10 10-5 4V3l5 4L7 17"/>';
+  $('dot').classList.toggle('on',connected);
+  $('bDisc').disabled=!connected;
+  $('bRaw').disabled=!connected;
+  $('bClr').disabled=!connected;
+  $('bExpA').disabled=!events.length;
+  $('bExpR').disabled=!raw.length;
+  const stEl=$('st');
+  if(connected){
+    stEl.innerHTML=t('st_connected')+' <b>'+(dev&&dev.name||'eillie-TT-Bat')+'</b>';
+  }else if(stEl.textContent.indexOf(t('st_failed'))<0 && stEl.textContent.indexOf(t('st_disc'))<0
+        && stEl.textContent.indexOf(t('st_connecting'))<0){
+    stEl.textContent=t('st_disconnected');
+  }
+}
+function dl(name,rows){
+  const blob=new Blob(['\ufeff'+rows.map(r=>r.join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);a.download=name;a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+
+/* ---------------- 事件绑定 ---------------- */
+$('bConn').onclick=connect;
+$('bDisc').onclick=()=>{if(dev&&dev.gatt.connected)dev.gatt.disconnect();else onDisc()};
+$('bRaw').onclick=()=>{
+  rawOn=!rawOn;
+  if(rawOn) raw=[];
+  $('bRaw').classList.toggle('rec',rawOn);
+  $('recLabel').textContent=rawOn?t('stop_rec'):t('rec');
+  $('bExpR').disabled=!raw.length;
+  toast(rawOn?t('rec_started'):t('rec_stopped')+raw.length+' '+t('unit_entry'));
+};
+$('bExpA').onclick=()=>dl('actions_'+Date.now()+'.csv',
+  [['time','type','confidence','peakGyro_dps','speed_kmh','sessionTotal'],
+   ...events.map(e=>['="'+e.t+'"',NAMES[e.idx],(e.conf/100).toFixed(2),e.peak,(e.spd/10).toFixed(1),e.tot])]);
+$('bExpR').onclick=()=>dl('imu_raw_'+Date.now()+'.csv',
+  [['t_ms','ax_g','ay_g','az_g','gx_dps','gy_dps','gz_dps'],...raw]);
+/* ---------------- 清空会话：弹窗确认 + 同步清空设备 ---------------- */
+function applyClear(){
+  stats=[0,0,0,0,0];events=[];raw=[];
+  snapshots=[];curSnapId=null;pending=null;   /* 同时清空击球快照 */
+  bufA=[];bufG=[];                            /* 波形缓冲一并清空 */
+  $('tb').innerHTML='';$('cnt').firstChild.textContent='0 ';
+  $('lastEvt').textContent=t('waiting');
+  $('tot').firstChild.textContent='0';
+  drawStats();renderSnapList();renderCmp();ui();
+}
+/* 下发指令到设备。'r' 与串口 r 命令同义 → resetCounters() */
+function sendCmd(str){
+  if(!cmdCh||!connected) return Promise.reject(new Error('no cmd char'));
+  return cmdCh.writeValue(new TextEncoder().encode(str+'\n'));
+}
+function askClear(){
+  $('mkTitle').textContent=t('clr_title');
+  $('mkBody').textContent=t('clr_body');
+  $('mkWarn').textContent=t('clr_warn');
+  $('mkYes').textContent=t('clr_yes');
+  $('mkNo').textContent=t('clr_no');
+  $('mask').classList.add('on');
+}
+function closeClear(){$('mask').classList.remove('on')}
+$('bClr').onclick=askClear;
+$('mkNo').onclick=closeClear;
+$('mask').onclick=e=>{if(e.target===$('mask'))closeClear()};
+$('mkYes').onclick=async()=>{
+  closeClear();
+  applyClear();
+  if(cmdCh&&connected){
+    try{
+      await sendCmd('r');            /* 设备端清零计数 */
+      toast(t('clr_sent'));
+    }catch(e){ toast(t('clr_devfail')); }
+  }else{
+    toast(connected?t('clr_devfail'):t('cleared'));
+  }
+};
+
+/* ---------------- 对比视图交互 ---------------- */
+$('segMode').querySelectorAll('button').forEach(b=>{
+  b.onclick=()=>{
+    cmpMode=b.dataset.m;
+    $('segMode').querySelectorAll('button').forEach(o=>o.classList.toggle('on',o===b));
+    renderCmp();
+  };
+});
+$('stdType').onchange=()=>{
+  curType=+$('stdType').value;
+  const s=snapshots.find(v=>v.idx===curType);
+  curSnapId=s?s.id:null;
+  renderSnapList();renderCmp();
+};
+$('bUp').onclick=()=>$('fStd').click();
+$('fStd').onchange=e=>{
+  const f=e.target.files&&e.target.files[0];
+  if(!f) return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    const o=parseStdCSV(String(rd.result));
+    if(!o){toast(t('std_bad'));return}
+    saveStd(curType,o,'csv');
+    $('stdSrc').textContent=stdSource(curType);
+    renderCmp();toast(t('std_loaded'));
+  };
+  rd.readAsText(f,'utf-8');
+  e.target.value='';
+};
+$('bSetStd').onclick=()=>{
+  const s=curSnapObj();
+  if(!s){toast(t('need_snap'));return}
+  saveStd(curType,{ax:s.ax,ay:s.ay,az:s.az,gx:s.gx,gy:s.gy,gz:s.gz},'shot');
+  $('stdSrc').textContent=stdSource(curType);
+  renderCmp();toast(t('std_saved')+strokeName(curType));
+};
+$('bExpStd').onclick=()=>{
+  const o=stdOf(curType);
+  const rows=[['t_ms','ax_g','ay_g','az_g','gx_dps','gy_dps','gz_dps']];
+  for(let i=0;i<SNAP_N;i++)
+    rows.push([Math.round(-SNAP_PRE+i*SNAP_DT),o.ax[i].toFixed(4),o.ay[i].toFixed(4),
+               o.az[i].toFixed(4),o.gx[i].toFixed(1),o.gy[i].toFixed(1),o.gz[i].toFixed(1)]);
+  dl('standard_'+NAMES[curType]+'.csv',rows);
+};
+$('bResetStd').onclick=()=>{
+  delete stdStore[NAMES[curType]];
+  try{localStorage.setItem(STD_KEY,JSON.stringify(stdStore))}catch(e){}
+  $('stdSrc').textContent=stdSource(curType);
+  renderCmp();toast(t('std_reset'));
+};
+
+/* ---------------- 语言切换 ---------------- */
+const langSel=$('langSel');
+langSel.value=curLang;
+langSel.addEventListener('change',()=>{
+  curLang=langSel.value;
+  localStorage.setItem('eillie_lang',curLang);
+  applyLang();
+});
+
+setInterval(()=>{
+  const ps=pktCnt-lastPk;lastPk=pktCnt;
+  $('meter').textContent=connected?ps+' pkt/s':'0 pkt/s';
+},1000);
+window.addEventListener('resize',()=>{
+  drawWave($('cA'),bufA,4);drawWave($('cG'),bufG,2000);
+  drawCmp();renderSnapList();
+});
+
+drawStats();renderStdType();renderSnapList();renderCmp();applyLang();requestAnimationFrame(loop);
+</script>
+</body>
+</html>
