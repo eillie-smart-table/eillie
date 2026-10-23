@@ -179,7 +179,7 @@ table{width:100%;border-collapse:collapse;font-size:12.5px}
 th,td{padding:8px 9px;text-align:left;white-space:nowrap;font-variant-numeric:tabular-nums;border-bottom:1px solid var(--line)}
 th{position:sticky;top:0;z-index:1;background:var(--navy-800);color:var(--dim);font-size:11px;font-weight:600;letter-spacing:.6px}
 tbody tr:hover{background:rgba(245,210,26,.05)}
-tbody tr:first-child td{color:var(--gold-lite)}
+#tb tr:first-child td{color:var(--gold-lite)}
 .hint{margin:20px 2px 0;font-size:12px;line-height:1.9;color:var(--dim);list-style:none}
 .hint li{position:relative;padding-left:14px}
 .hint li::before{content:"";position:absolute;left:0;top:9px;width:5px;height:5px;border-radius:1px;background:var(--gold);opacity:.65}
@@ -969,23 +969,28 @@ function drawCmp(){
   x.textAlign='center';
   x.fillText('+700',Math.min(W-22*d,x0+(W-x0)*0.72),H-5*d);
   x.textAlign='left';
-  let mx=0;
+  /* 分组归一化：加速度(g)与角速度(dps)量纲差约百倍，共用一个 y 标尺
+     会把另一组曲线压成直线。改为两组各用自己的峰值定标。 */
+  let mxA=0,mxG=0;
   for(const a of axes){
-    for(const v of std[a.k]) mx=Math.max(mx,Math.abs(v));
-    if(snap) for(const v of snap[a.k]) mx=Math.max(mx,Math.abs(v));
+    let m=0;
+    for(const v of std[a.k]) m=Math.max(m,Math.abs(v));
+    if(snap) for(const v of snap[a.k]) m=Math.max(m,Math.abs(v));
+    if(a.k[0]==='g') mxG=Math.max(mxG,m); else mxA=Math.max(mxA,m);
   }
-  mx=mx*1.15||1;
-  const px=i=>W*i/(SNAP_N-1), py=v=>H/2-v/mx*(H/2-H*0.17);
+  mxA=mxA*1.15||1; mxG=mxG*1.15||1;
+  const px=i=>W*i/(SNAP_N-1), py=(v,mx)=>H/2-v/mx*(H/2-H*0.17);
   for(const a of axes){
+    const mg=a.k[0]==='g'?mxG:mxA;
     x.strokeStyle=a.c;x.globalAlpha=.45;x.lineWidth=Math.max(1.1,d);
     x.setLineDash([Math.round(5*d),Math.round(4*d)]);
     x.beginPath();
-    std[a.k].forEach((v,i)=>{i?x.lineTo(px(i),py(v)):x.moveTo(px(i),py(v))});
+    std[a.k].forEach((v,i)=>{i?x.lineTo(px(i),py(v,mg)):x.moveTo(px(i),py(v,mg))});
     x.stroke();x.setLineDash([]);
     if(snap){
       x.globalAlpha=1;x.lineWidth=Math.max(1.6,d*1.5);x.lineJoin='round';x.lineCap='round';
       x.beginPath();
-      snap[a.k].forEach((v,i)=>{i?x.lineTo(px(i),py(v)):x.moveTo(px(i),py(v))});
+      snap[a.k].forEach((v,i)=>{i?x.lineTo(px(i),py(v,mg)):x.moveTo(px(i),py(v,mg))});
       x.stroke();
     }
   }
