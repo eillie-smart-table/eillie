@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -642,7 +642,7 @@ const LANGS={
   }
 };
 const STROKE_NAME={en:EN,'zh-CN':CN,'zh-TW':TW};
-let curLang=localStorage.getItem('eillie_lang')||'zh-CN';
+let curLang=localStorage.getItem('eillie_lang')||'zh-TW';
 function t(k){return(LANGS[curLang]&&LANGS[curLang][k])||LANGS.en[k]||k}
 function strokeName(i){return STROKE_NAME[curLang][i]||NAMES[i]}
 function applyLang(){
